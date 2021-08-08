@@ -1,3 +1,13 @@
+# aplication （以下の3行は.gitignoreの先頭に置くこと，それ以外をこの上の行に書いたりしないように）
+*
+!*/
+!*.*
+# csv xls xlsx files
+*.csv
+*.xls
+*.xlsx
+# text
+*.txt
 # Prerequisites
 *.d
 
