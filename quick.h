@@ -32,7 +32,8 @@ int quick_select_k_para_work(int idx[], unsigned sc[], int n, int k, work_select
 int get_top_k_from_work_para(int data_num[], int idx[], work_select_para *wp);
 int get_threshold_k(int idx[], unsigned sc[], int n, int k, int nt);
 
-// int find_pivot_for_sketch(int idx[], sketch_type sk[], int i, int j);
-// int partition_by_pivot_for_sketch(int idx[], sketch_type sk[], int i, int j, sketch_type piv);
-// void quick_sort_for_sketch(int idx[], sketch_type sk[], int i, int j);
-
+//#if defined(WIDE_SKETCH) || defined(EXPANDED_SKETCH)
+//int find_pivot_for_sketch(int idx[], sketch_type sk[], int i, int j);
+//int partition_by_pivot_for_sketch(int idx[], sketch_type sk[], int i, int j, sketch_type piv);
+//void quick_sort_for_sketch(int idx[], sketch_type sk[], int i, int j);
+//#endif

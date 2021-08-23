@@ -14,6 +14,7 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include "parm.h"
 #include "bit_op.h"
 #include "sketch.h"
 #include "quick.h"
@@ -177,6 +178,17 @@ struct_bucket *new_bucket(int num_data, sketch_type sk[])
 
 	return b;
 }
+
+int comp_sketch(sketch_type a, sketch_type b)
+{
+	if(a < b)
+		return -1;
+	else if(a == b)
+		return 0;
+	else
+		return 1;
+}
+
 #else
 
 #ifndef EXPANDED_SKETCH
@@ -381,7 +393,7 @@ struct_bucket *read_bucket(char *filename)
 			exit(0);
 		}
 		if(fread(&snp.num, sizeof(int), 1, fp) != 1) {  // num_elements を読み込む
-			fprintf(stderr, "fread error (sketch) file = %s\n", filename);
+			fprintf(stderr, "fread error (num_elements) file = %s\n", filename);
 			exit(0);
 		}
 		snp.pos = num;
@@ -459,7 +471,7 @@ struct_bucket *read_compact_bucket(char *filename)
 		}
 		#else
 		if(fread(snp.sk, sizeof(sketch_type), 1, fp) != 1) {  // sketch を読み込む
-			fprintf(stderr, "fread error (sketch) file = %s\n", filename);
+			fprintf(stderr, "fread error (expanded sketch) file = %s\n", filename);
 			exit(0);
 		}
 		#endif
@@ -470,7 +482,11 @@ struct_bucket *read_compact_bucket(char *filename)
 		snp.pos = offset;
 //		b->sk_num[i] = snp; // (sk_num_pair) {s, num_elements, offset};
 		for(int j = snp.pos; j < snp.pos + snp.num; j++) {
+			#ifndef EXPANDED_SKETCH
+			b->sk[b->idx[j]] = snp.sk;
+			#else
 			memcpy(b->sk[b->idx[j]], snp.sk, sizeof(sketch_type));
+			#endif
 		}
 		offset += snp.num;
 	}
@@ -491,6 +507,78 @@ struct_bucket *read_compact_bucket(char *filename)
 	}
 */
 	return b;
+}
+
+// bkt ファイルに保存されているsk_numを読み込むためにopenする．
+struct_bucket_sk_num *open_bucket_sk_num(char *filename)
+{
+	struct_bucket_sk_num *bsk = (struct_bucket_sk_num *)malloc(sizeof(struct_bucket_sk_num));
+	bsk->filename = filename;
+	if((bsk->fp = fopen(filename, "rb"))  == NULL) {
+		fprintf(stderr, "Read open bucket file error, file name = %s\n", filename);
+		exit(0);
+	}
+
+	int num_data;
+	if(fread(&num_data, sizeof(int), 1, bsk->fp) != 1) {  // ファイルに書かれている num_data を読み込む
+		fprintf(stderr, "fread error (num_data) file = %s\n", filename);
+		exit(0);
+	}
+
+	bsk->num_data = num_data;
+	if(fseek(bsk->fp, (long)(sizeof(int) * num_data), SEEK_CUR) != 0) {  // idx[num_data] を読み飛ばす
+		fprintf(stderr, "fseek error (to skip ibk, size = %ld, file = %s)\n", sizeof(int) * num_data, filename);
+		exit(0);
+	}
+
+	if(fread(&bsk->num_nonempty_buckets, sizeof(int), 1, bsk->fp) != 1) {  // ファイルに書かれている num_nonempty_buckets を読み込む
+		fprintf(stderr, "fread error (num_nonempty_buckets) file = %s\n", filename);
+		exit(0);
+	}
+
+	#ifndef EXPANDED_SKETCH
+	if(fread(&bsk->sk_num.sk, sizeof(sketch_type), 1, bsk->fp) != 1) {  // sketch を読み込む
+		fprintf(stderr, "fread error (sketch) file = %s\n", filename);
+		exit(0);
+	}
+	#else
+	if(fread(bsk->sk_num.sk, sizeof(sketch_type), 1, bsk->fp) != 1) {  // sketch を読み込む
+		fprintf(stderr, "fread error (expanded sketch) file = %s\n", filename);
+		exit(0);
+	}
+	#endif
+	if(fread(&bsk->sk_num.num, sizeof(int), 1, bsk->fp) != 1) {  // num_elements を読み込む
+		fprintf(stderr, "fread error (num_elements) file = %s\n", filename);
+		exit(0);
+	}
+	fprintf(stderr, "num_nonempty_buckets = %d, average number of elements in nonempty buckets = %.2lf\n", bsk->num_nonempty_buckets, (double)num_data / bsk->num_nonempty_buckets);
+	bsk->processed_buckets = 0;
+
+	return bsk;
+}
+
+int read_next_bucket_sk_num(struct_bucket_sk_num *bsk)
+{
+	if(++bsk->processed_buckets >= bsk->num_nonempty_buckets) {
+		return 0;	// EOF (all sk_num_pairs are processed)
+	}
+	#ifndef EXPANDED_SKETCH
+	if(fread(&bsk->sk_num.sk, sizeof(sketch_type), 1, bsk->fp) != 1) {  // sketch を読み込む
+		fprintf(stderr, "fread error (sketch) file = %s, num_nonempty_buckets = %d, processed_buckets = %d\n", bsk->filename, bsk->num_nonempty_buckets, bsk->processed_buckets);
+		exit(0);
+	}
+	#else
+	if(fread(bsk->sk_num.sk, sizeof(sketch_type), 1, bsk->fp) != 1) {  // sketch を読み込む
+		fprintf(stderr, "fread error (expanded sketch) file = %s, num_nonempty_buckets = %d, processed_buckets = %d\n", bsk->filename, bsk->num_nonempty_buckets, bsk->processed_buckets);
+		exit(0);
+	}
+	#endif
+	if(fread(&bsk->sk_num.num, sizeof(int), 1, bsk->fp) != 1) {  // num_elements を読み込む
+		fprintf(stderr, "fread error (num_elements) file = %s, num_nonempty_buckets = %d, processed_buckets = %d\n", bsk->filename, bsk->num_nonempty_buckets, bsk->processed_buckets);
+		exit(0);
+	}
+
+	return 1;
 }
 
 #if defined(NARROW_SKETCH)
@@ -831,7 +919,36 @@ dist_type priority(sketch_type s, struct_query_sketch *q)
 #endif
 #endif	
 }
-
+/*
+dist_type priority_partitioned(sketch_type s, struct_query_sketch *q)
+{
+// PART_START(p), PART_DIM(p), PART_END(p), PART_PJT_DIM(p) 射影次元（p = 0, ... , PJT_DIM - 1）に対応する部分空間の
+// 開始次元番号, 次元数, 最終次元番号, 射影次元数
+#ifndef EXPANDED_SKETCH
+	sketch_type d = s ^ q->sketch;
+	dist_type score = 0;
+	for(int p = 0; p < PJT_DIM; ) {
+		dist_type score_part = 0;
+		for(int q = PART_START(p); q <= PART_END(p); q++) ;
+	}
+	#if defined(NARROW_SKETCH)
+	return q->tbl[0][d & 0xff] + q->tbl[1][(d >> 8) & 0xff] + q->tbl[2][(d >> 16) & 0xff] + q->tbl[3][d >> 24];
+	#else
+	return q->tbl[0][d & 0xff] + q->tbl[1][(d >> 8) & 0xff] + q->tbl[2][(d >> 16) & 0xff] + q->tbl[3][(d >> 24) & 0xff]
+	     + q->tbl[4][(d >> 32) & 0xff] + q->tbl[5][(d >> 40) & 0xff] + q->tbl[6][(d >> 48) & 0xff] + q->tbl[7][d >> 56];
+	#endif
+#else
+	dist_type p = 0;
+	unsigned long d;
+	for(int i = 0; i < SKETCH_SIZE; i++) {
+		d = s[i] ^ q->sketch[i];
+		p += q->tbl[i * 8 + 0][d & 0xff] + q->tbl[i * 8 + 1][(d >> 8) & 0xff] + q->tbl[i * 8 + 2][(d >> 16) & 0xff] + q->tbl[i * 8 + 3][(d >> 24) & 0xff]
+		     + q->tbl[i * 8 + 4][(d >> 32) & 0xff] + q->tbl[i * 8 + 5][(d >> 40) & 0xff] + q->tbl[i * 8 + 6][(d >> 48) & 0xff] + q->tbl[i * 8 + 7][d >> 56];
+	}
+	return p;
+#endif
+}
+*/
 dist_type hamming(sketch_type s, sketch_type t)
 {
 #ifndef EXPANDED_SKETCH
@@ -1101,6 +1218,10 @@ void filtering_by_sketch_enumeration_c2_n(struct_query_sketch *qs, struct_bucket
 
 */
 
+#ifndef TRIAL
+#define TRIAL 5
+#endif
+
 #ifndef EXPANDED_SKETCH
 // スケッチの配列を相対的にソートする．idxを入れ替える．
 int find_pivot_for_sketch(int idx[], sketch_type sk[], int i, int j)
@@ -1164,9 +1285,6 @@ void quick_sort_for_sketch(int idx[], sketch_type sk[], int i, int j)
 //}
 
 // スケッチの配列を相対的にソートする．idxを入れ替える．
-#ifndef TRIAL
-#define TRIAL 5
-#endif
 int find_pivot_for_sketch(int idx[], sketch_type sk[], int i, int j)
 {
 	int k, cmp;

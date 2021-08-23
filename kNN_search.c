@@ -86,7 +86,6 @@ dist_type dist_L2_22(ftr_type b)
 	}
 	return s;
 }
-
 #ifdef PARTITION_TYPE_PQBP
 dist_type part_dist_L2(ftr_type a, ftr_type b, int dim_start, int dim)
 // 注意：平方根を取っていない
@@ -141,6 +140,7 @@ dist_type part_dist_L2_22(ftr_type b, int dim_start, int dim)
 }
 
 #endif
+
 // answer_typeの配列をソートする．
 // quick sort のための 関数群 find_pivot, partition_by _pivot, quick_sort
 
@@ -456,7 +456,13 @@ void search_kNN(dataset_handle *dh, query_type *qr, int num_candidates, int data
 			ans.dist = DISTANCE_22(dh->ds->ftr_id[data_num_of_candidate[i]].ftr);
 //			data_id = dh->ds->ftr_id[data_num_of_candidate[i]].data_id;
 		} else {
-			struct_ftr_id *ftr_id_p = get_next_ftr_id_from_multi_ftr(mf, data_num_of_candidate, i, num_candidates);
+			struct_ftr_id *ftr_id_p;
+//			if(mf->block_size > 1 && mf->next >= mf->read_in) {
+//				#pragma omp critical
+				ftr_id_p = get_next_ftr_id_from_multi_ftr(mf, data_num_of_candidate, i, num_candidates);
+//			} else {
+//				ftr_id_p = get_next_ftr_id_from_multi_ftr(mf, data_num_of_candidate, i, num_candidates);
+//			}
 			ans.dist = DISTANCE_22(ftr_id_p->ftr);
 //			data_id = ftr_id_p->data_id;
 //			ans.dist = DISTANCE_22(get_next_ftr_id_from_multi_ftr(dh->mf, data_num_of_candidate, i, num_candidates)->ftr);
@@ -604,7 +610,7 @@ void out_result(char *filename, int num_queries, answer_type ans[], kNN_buffer *
 	fclose(fp);
 }
 
-void out_result2(char *filename, int w, int d, long sec, long nsec, int num_c, int num_queries, answer_type ans[], kNN_buffer *top_k[], int sorted)
+void out_result2(char *filename, int w, int d, double etime, double num_c, int num_queries, answer_type ans[], kNN_buffer *top_k[], int sorted)
 {
 	int i;
 	FILE *fp;
@@ -645,33 +651,33 @@ void out_result2(char *filename, int w, int d, long sec, long nsec, int num_c, i
 	int nt = 1;
 	#endif
 	
+	char *m = "";
 	#ifdef SEQUENTIAL_FILTERING
-	char *m = "SF";
+	m = "SF";
 	#endif
 	#ifdef SEQUENTIAL_FILTERING_USING_BUCKET
-	char *m = "BKT";
+	m = "BKT";
 	#endif
 	#ifdef SEQUENTIAL_FILTERING_USING_HAMMING
-	char *m = "HAMMING";
+	m = "HAMMING";
 	#endif
 	#ifdef FILTERING_BY_SKETCH_ENUMERATION_C2N
-	char *m = "ENU";
+	m = "ENU";
 	#endif
 	#ifdef WITHOUT_FILTERING
-	char *m = "NO";
-	#endif
-	#ifdef DOUBLE_FILTERING
-	char *m = "DF";
+	m = "NO";
 	#endif
 	
 
-	fprintf(fp, "w, dim, nt, time, k'/n(ppm), recall, method, sort\n");
-	fprintf(fp, "%d, %d, %d, %ld.%09ld, %d, %f, %s, %d, mark\n", w, d, nt, sec, nsec, num_c, sum / num_queries * 100, m, sorted);
+	fprintf(fp, "w, dim, nt, time, K, recall, method, sort\n");
+	fprintf(fp, "%d, %d, %d, %.9lf, %f, %f, %s, %d, mark\n", w, d, nt, etime, num_c, sum / num_queries * 100, m, sorted);
 
 	fclose(fp);
 }
 
-double out_result_double(char *filename, int n_w, int e_w, int d, double etime, int nc_1st, int nc_2nd, int num_queries, answer_type ans[], kNN_buffer *top_k[])
+#ifdef DOUBLE_FILTERING
+
+double out_result_double(char *filename, int n_w, int e_w, int d, double etime, double nc_1st, double nc_2nd, int num_queries, answer_type ans[], kNN_buffer *top_k[])
 {
 	int i;
 	FILE *fp;
@@ -731,14 +737,15 @@ double out_result_double(char *filename, int n_w, int e_w, int d, double etime, 
 	char *m = "DF";
 	#endif
 	
-	#ifdef SCORE_P_1ST
+
 	fprintf(fp, "n_w, e_w, dim, nt, time, p_1,  k_1'/n(ppm), p_2, k_2'/n(ppm), recall, method, query\n");
-	fprintf(fp, "%d, %d, %d, %d, %.9lf, %lf, %d, %lf, %d, %lf, %s, %s, mark\n", n_w, e_w, d, nt, etime, SCORE_P_1ST / 10.0, nc_1st, SCORE_P_2ND / 10.0, nc_2nd, sum / num_queries * 100, m, QUERY_FILE);
+	fprintf(fp, "%d, %d, %d, %d, %.9lf, %lf, %.2lf, %lf, %.2lf, %lf, %s, %s, mark\n", n_w, e_w, d, nt, etime, SCORE_P_1ST / 10.0, nc_1st, SCORE_P_2ND / 10.0, nc_2nd, sum / num_queries * 100, m, QUERY_FILE);
 	printf("n_w, e_w, dim, nt, time, p_1,  k_1'/n(ppm), p_2, k_2'/n(ppm), recall, method, query\n");
-	printf("%d, %d, %d, %d, %.9lf, %lf, %d, %lf, %d, %lf, %s, %s, mark\n", n_w, e_w, d, nt, etime, SCORE_P_1ST / 10.0, nc_1st, SCORE_P_2ND / 10.0, nc_2nd, sum / num_queries * 100, m, QUERY_FILE);
-	#endif
+	printf("%d, %d, %d, %d, %.9lf, %lf, %.2lf, %lf, %.2lf, %lf, %s, %s, mark\n", n_w, e_w, d, nt, etime, SCORE_P_1ST / 10.0, nc_1st, SCORE_P_2ND / 10.0, nc_2nd, sum / num_queries * 100, m, QUERY_FILE);
 
 	fclose(fp);
 
 	return sum / num_queries * 100;
 }
+#endif
+

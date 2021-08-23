@@ -4,6 +4,7 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include "parm.h"
 #include "bit_op.h"
 #include "sketch.h"
 #include "quick.h"
@@ -32,6 +33,11 @@ int main(int argc, char *argv[])
 	#endif
 	ftr_type *sample = get_sample(sample_ds); // ピボット評価用のサンプル
 	ftr_type median = get_median(sample_ds); //中央値計算
+
+	for(int i = 0; i < FTR_DIM; i++) {
+		printf("med[%d] = %d\n", i, median[i]);
+	}
+	
 	clock_t start,end;
 	time_t s_t, e_t;
 	start = clock(); s_t = time(NULL);

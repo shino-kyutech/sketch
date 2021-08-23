@@ -1,3 +1,4 @@
+#include "parm.h"
 #include "kNN_search.h"
 #include "pivot_selection.h"
 #include "sketch.h"
@@ -32,7 +33,7 @@ ftr_type *get_sample(struct_dataset *ds)
 
 ftr_type get_median(struct_dataset *ds)
 {
-	int cnt[256];
+	long cnt[256];
 	int i, j, s, t;
 	ftr_type med = (ftr_type)malloc(FTR_DIM * sizeof(ftr_element_type));
 
@@ -40,14 +41,21 @@ ftr_type get_median(struct_dataset *ds)
 		for(i = 0; i < 256; i++) {
 			cnt[i] = 0;
 		}
-		
 		for(i = t = 0; i < ds->num_data; i += 500) {
+			#if defined(DECAF)
 			cnt[ds->ftr_id[i].ftr[j]]++; t++;
+			#else
+			cnt[ds->ftr_id[i].ftr[j] + 127]++; t++;
+			#endif
 		}
 		for(i = s = 0; (i < 256) && (s < t / 2); i++) {
 			s += cnt[i];
 		}
+		#if defined(DECAF)
 		med[j] = i;
+		#else
+		med[j] = i - 127;
+		#endif
 	}
 	return med;
 }
@@ -102,12 +110,12 @@ void select_pivot_QBP(pivot_type *pivot, ftr_type median, ftr_type sample[], str
 			#endif
 			for(int i = 0; i < FTR_DIM; i++) {
 				#ifndef PARTITION_TYPE_PQBP
-				pivot->p[dim][i] = ds->ftr_id[c].ftr[i] < median[i] ? 0 : 255;
+				pivot->p[dim][i] = ds->ftr_id[c].ftr[i] < median[i] ? FTR_MIN : FTR_MAX;
 				#else
 				if(i < PART_START(dim) || i >= PART_START(dim) + PART_DIM(dim)) {
-					pivot->p[dim][i] = 127; // 使用しないところはすべて0にしておく．
+					pivot->p[dim][i] = 0; // 使用しないところはすべて0にしておく．
 				} else {
-					pivot->p[dim][i] = ds->ftr_id[c].ftr[i] < median[i] ? 0 : 255;
+					pivot->p[dim][i] = ds->ftr_id[c].ftr[i] < median[i] ? FTR_MIN : FTR_MAX;
 				}
 			#endif
 			}
@@ -237,12 +245,12 @@ void select_pivot_random_QBP(pivot_type *pivot, ftr_type median, struct_dataset 
 		int c = rdm[dim];
 		for(int i = 0; i < FTR_DIM; i++) {
 			#ifndef PARTITION_TYPE_PQBP
-			pivot->p[dim][i] = ds->ftr_id[c].ftr[i] < median[i] ? 0 : 255;
+			pivot->p[dim][i] = ds->ftr_id[c].ftr[i] < median[i] ? FTR_MIN : FTR_MAX;
 			#else
 			if(i < PART_START(dim) || i >= PART_START(dim) + PART_DIM(dim)) {
 				pivot->p[dim][i] = 0; // 使用しないところはすべて0にしておく．
 			} else {
-				pivot->p[dim][i] = ds->ftr_id[c].ftr[i] < median[i] ? 0 : 255;
+				pivot->p[dim][i] = ds->ftr_id[c].ftr[i] < median[i] ? FTR_MIN : FTR_MAX;
 			}
 			#endif
 		}

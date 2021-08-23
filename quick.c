@@ -1100,7 +1100,7 @@ int get_threshold_k(int idx[], unsigned sc[], int n, int k, int nt)
 	return pivot;
 }
 /*
-#ifndef EXPANDED_SKETCH
+#if defined(WIDE_SKETCH)
 // スケッチの配列を相対的にソートする．idxを入れ替える．
 int find_pivot_for_sketch(int idx[], sketch_type sk[], int i, int j)
 {
@@ -1147,7 +1147,8 @@ void quick_sort_for_sketch(int idx[], sketch_type sk[], int i, int j)
 		quick_sort_for_sketch(idx, sk, k, j);
 	}
 }
-#else
+
+#elif defined(EXPANDED_SKETCH)
 
 static int comp_sketch(sketch_type a, sketch_type b)
 {

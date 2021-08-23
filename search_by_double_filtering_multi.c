@@ -6,41 +6,11 @@
 #include "double_sketch.h"
 #include "quick.h"
 #include "bit_op.h"
+#include "e_time.h"
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/resource.h>
-/*
-static int comp_data_num(const void *a, const void *b) {
-	if(*((int *) a) < *((int *) b))
-		return -1;
-	else if(*((int *) a) == *((int *) b))
-		return 0;
-	else
-		return 1;
-}
-*/
-static double e_time(struct timespec *start, struct timespec *end)
-{
-	long sec = end->tv_sec - start->tv_sec;
-	long nsec = end->tv_nsec - start->tv_nsec;
-	if(nsec < 0){
-		sec--;
-		nsec += 1000000000L;
-	}
-	return (double)sec + (double)nsec/1000000000;
-}
-
-// VmSize or VmRSS
-static void use_system(char *rs)
-{
-	char command[500];
-
-	fflush(stdout);
-	sprintf(command, "grep %s /proc/%d/status", rs, getpid());
-	system(command);
-	fflush(stdout);
-}
 
 int main(int argc, char *argv[])
 {
@@ -113,12 +83,6 @@ int main(int argc, char *argv[])
 	fprintf(stderr, "sort expanded sketches in narrow sketch order, ");
 	sort_expanded_sketches_narrow_sketch_order(expanded_bucket_ds->sk, narrow_bucket_ds->idx, num_data);
 	clock_gettime(CLOCK_REALTIME, &tp02);
-	long sec0 = tp02.tv_sec - tp01.tv_sec;
-	long nsec0 = tp02.tv_nsec - tp01.tv_nsec;
-	if(nsec0 < 0){
-		sec0--;
-		nsec0 += 1000000000L;
-	}
 	fprintf(stderr, "OK. %.4lf: ", e_time(&tp01, &tp02));
 	use_system("VmSize");
 
@@ -180,21 +144,21 @@ int main(int argc, char *argv[])
 	kNN_buffer **top_k = (kNN_buffer **)malloc(sizeof(kNN_buffer *) * num_queries);
 //	#endif
 	// NUM_CANDIDATES_1st, 2nd = データセットに対する割合（パーミリアド（万分率））
-	int nc1_start = NUM_CANDIDATES_1ST;
-	int nc1_end   = NUM_CANDIDATES_1ST_END;
-	int nc1_step  = NUM_CANDIDATES_1ST_STEP;
-	int nc2_start = NUM_CANDIDATES_2ND;
-	int nc2_end   = NUM_CANDIDATES_2ND_END;
-	int nc2_step  = NUM_CANDIDATES_2ND_STEP;
+	double nc1_start = NUM_CANDIDATES_1ST;
+	double nc1_end   = NUM_CANDIDATES_1ST_END;
+	double nc1_step  = NUM_CANDIDATES_1ST_STEP;
+	double nc2_start = NUM_CANDIDATES_2ND;
+	double nc2_end   = NUM_CANDIDATES_2ND_END;
+	double nc2_step  = NUM_CANDIDATES_2ND_STEP;
 	#ifdef NUM_Q
 	num_queries = NUM_Q;
 	#endif
 
-	for(int nc1 = nc1_start; nc1 <= nc1_end; nc1 += nc1_step) {
+	for(double nc1 = nc1_start; nc1 <= nc1_end; nc1 += nc1_step) {
 		int num_candidates_1st = nc1 * 0.000001 * num_data;
-		for(int nc2 = nc2_start; nc2 <= nc2_end; nc2 += nc2_step) {
+		for(double nc2 = nc2_start; nc2 <= nc2_end; nc2 += nc2_step) {
 			int num_candidates_2nd = nc2 * 0.000001 * num_data;
-			fprintf(stderr, "num_data = %d, NUM_CANDIDATES_1st = %d, num_candidates_1st = %d, NUM_CANDIDATES_2nd = %d, num_candidates_2nd = %d\n", num_data, nc1, num_candidates_1st, nc2, num_candidates_2nd);
+			fprintf(stderr, "num_data = %d, NUM_CANDIDATES_1st = %.2lf (ppm), num_candidates_1st = %d, NUM_CANDIDATES_2nd = %.2lf (ppm), num_candidates_2nd = %d\n", num_data, nc1, num_candidates_1st, nc2, num_candidates_2nd);
 
 			struct timespec tp1, tp2, tp3, tp4, tp5, tp6, tp7;
 			clock_gettime(CLOCK_REALTIME, &tp1);

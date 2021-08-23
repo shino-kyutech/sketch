@@ -6,11 +6,13 @@
 #include "sketch.h"
 #include "quick.h"
 #include "bit_op.h"
+#include "e_time.h"
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/resource.h>
 
+#if defined(SEQUENTIAL_FILTERING_USING_BUCKET) || defined(SEQUENTIAL_FILTERING_USING_HAMMING) || defined(FILTERING_BY_SKETCH_ENUMERATION_C2N)
 static int comp_data_num(const void *a, const void *b) {
 	if(*((int *) a) < *((int *) b))
 		return -1;
@@ -19,6 +21,7 @@ static int comp_data_num(const void *a, const void *b) {
 	else
 		return 1;
 }
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -177,17 +180,21 @@ int main(int argc, char *argv[])
 	#if NUM_K > 0
 	kNN_buffer **top_k = (kNN_buffer **)malloc(sizeof(kNN_buffer *) * num_queries);
 	#endif
-	// NUM_CANDIDATES = データセットに対する割合（パーミリアド（万分率））
-	int nc[6] = {NUM_CANDIDATES, NUM_CANDIDATES1, NUM_CANDIDATES2, NUM_CANDIDATES3, NUM_CANDIDATES4, NUM_CANDIDATES5};
+
+	use_system("VmSize");
+	// NUM_CANDIDATES = データセットに対する割合（ppm = 10^{-6}）
+	// int nc[6] = {NUM_CANDIDATES, NUM_CANDIDATES1, NUM_CANDIDATES2, NUM_CANDIDATES3, NUM_CANDIDATES4, NUM_CANDIDATES5};
+	double nc[6] = {NUM_CANDIDATES, NUM_CANDIDATES1, NUM_CANDIDATES2, NUM_CANDIDATES3, NUM_CANDIDATES4, NUM_CANDIDATES5};
 	for(int i = 0; i < 6; i++) {
 		if(nc[i] == 0) break;
 		int num_candidates = nc[i] * 0.000001 * num_data;
-		fprintf(stderr, "num_data = %d, NUM_CANDIDATES = %d, num_candidates = %d\n", num_data, nc[i], num_candidates);
+		fprintf(stderr, "num_data = %d, NUM_CANDIDATES = %.2lf (ppm), num_candidates = %d\n", num_data, nc[i], num_candidates);
 		#if defined(SEQUENTIAL_FILTERING)
 		#elif defined(SEQUENTIAL_FILTERING_USING_BUCKET) || defined(SEQUENTIAL_FILTERING_USING_HAMMING)
 		int num_buckets_of_candidates = (double)num_nonempty_buckets * nc[i] * 0.0001 * 1.5;
 		fprintf(stderr, "number of buckets to select candidates = %d\n", num_buckets_of_candidates);
 		#endif
+		double total_filtering_cost = 0, total_scoring_cost = 0;
 		struct timespec tp1, tp2;
 		clock_gettime(CLOCK_REALTIME, &tp1);
 
@@ -197,6 +204,7 @@ int main(int argc, char *argv[])
 		#endif
 		for(int i = 0; i < num_queries; i++) {
 
+			double filtering_cost, scoring_cost;
 			struct timespec tp3, tp4;
 			clock_gettime(CLOCK_REALTIME, &tp3);
 
@@ -205,6 +213,7 @@ int main(int argc, char *argv[])
 			#else
 			set_query_sketch_p(query_sketch, &qr[i], pivot, SCORE_P / 10.0);
 			#endif
+		// Filtering by sketches
 		#if defined(FILTERING_BY_SKETCH_ENUMERATION) || defined(FILTERING_BY_SKETCH_ENUMERATION_C2N)
 			#ifdef FILTERING_BY_SKETCH_ENUMERATION
 			filtering_by_sketch_enumeration(query_sketch, bucket_ds, que, data_num, num_candidates);
@@ -225,6 +234,7 @@ int main(int argc, char *argv[])
 			}
 			#endif
 		#else
+			// Scoring
 			#if defined(_OPENMP) && defined(NUM_THREADS) && NUM_THREADS > 1 
 			// omp_set_num_threads(NUM_THREADS);
 			#pragma omp parallel for
@@ -252,10 +262,15 @@ int main(int argc, char *argv[])
 					score[j] = hamming(bucket_ds->sk_num[j].sk, query_sketch->sketch);
 				}
 			#endif
+			// Scoring END
+			clock_gettime(CLOCK_REALTIME, &tp4);
+			scoring_cost = e_time(&tp3, &tp4);
+			total_scoring_cost += scoring_cost;
 
 			#if NUM_K == -1
 				// scoring only
 			#else
+				// Candidate selection
 				#if defined(SEQUENTIAL_FILTERING)
 					#if NUM_THREADS == 1
 						quick_select_k(idx, score, 0, num_data - 1, num_candidates);
@@ -299,7 +314,11 @@ int main(int argc, char *argv[])
 					}
 				#endif
 			#endif
-		#endif // filtering
+		#endif // filtering 
+			clock_gettime(CLOCK_REALTIME, &tp4);
+			filtering_cost = e_time(&tp3, &tp4);
+			total_filtering_cost += filtering_cost;
+
 			#if NUM_K <= 0
 				// scoreing or filtering only
 			#else
@@ -309,20 +328,19 @@ int main(int argc, char *argv[])
 				} else {
 					search_kNN(&dh, &qr[i], k, data_num, top_k[i]);
 				}
+				if(dh.sorted) { // convert data_num as the index in the sketch order to the index in the original order
+					for(int j = 0; j < num_top_k; j++) {
+						top_k[i]->buff[j].data_num = bucket_ds->idx[top_k[i]->buff[j].data_num];
+					}
+				}
 			#endif
 			
 			clock_gettime(CLOCK_REALTIME,&tp4);
-			long sec = tp4.tv_sec - tp3.tv_sec;
-			long nsec = tp4.tv_nsec - tp3.tv_nsec;
-			if(nsec < 0){
-				sec--;
-				nsec += 1000000000L;
-			}
 			#if NUM_K <= 0
-			//fprintf(stderr, "%ld.%09ld\n", sec, nsec);
+			//fprintf(stderr, "%.9ld\n", e_time(&tp3, &tp4));
 			#else
 			#if NUM_Q <= 20
-			fprintf(stderr, "%ld.%09ld, %d, %d, %d\n", sec, nsec, i, top_k[i]->buff[0].data_num, top_k[i]->buff[0].dist);
+			fprintf(stderr, "%.9lf, %.9lf, %.9lf, %d, %d, %d\n", scoring_cost, filtering_cost, e_time(&tp3, &tp4), i, top_k[i]->buff[0].data_num, top_k[i]->buff[0].dist);
 			#endif
 //			struct rusage usage;
 //			int rc;
@@ -336,19 +354,13 @@ int main(int argc, char *argv[])
 		}
 
 		clock_gettime(CLOCK_REALTIME,&tp2);
-		long sec = tp2.tv_sec - tp1.tv_sec;
-		long nsec = tp2.tv_nsec - tp1.tv_nsec;
-		if(nsec < 0){
-			sec--;
-			nsec += 1000000000L;
-		}
 		#if NUM_K > 0
-		fprintf(stderr, "%ld.%09ld\n", sec, nsec);
+		fprintf(stderr, "%.9lf, %.9lf, %.9lf\n", total_scoring_cost, total_filtering_cost, e_time(&tp1, &tp2));
 		#else
 		#if NUM_K < 0
-		printf("%ld.%09ld, %d, %d, scoring, ", sec, nsec, PJT_DIM, NUM_THREADS);
+		printf("%.9lf, %d, %d, scoring, ", e_time(&tp1, &tp2), PJT_DIM, NUM_THREADS);
 		#else
-		printf("%ld.%09ld, %d, %d, filtering, ", sec, nsec, PJT_DIM, NUM_THREADS);
+		printf("%.9lf, %d, %d, filtering, ", e_time(&tp1, &tp2), PJT_DIM, NUM_THREADS);
 		#endif
 		#if defined(SEQUENTIAL_FILTERING) 
 		printf("SEQUENTIAL_FILTERING\n");
@@ -363,7 +375,7 @@ int main(int argc, char *argv[])
 		strcpy(result_filename2, result_filename);
 		result_filename2 = strtok(result_filename2, ".");
 		result_filename2 = strcat(result_filename2, "_result.csv");
-		out_result2(result_filename2, PJT_DIM, FTR_DIM, sec, nsec, nc[i], num_queries, correct_answer, top_k, dh.sorted);
+		out_result2(result_filename2, PJT_DIM, FTR_DIM, e_time(&tp1, &tp2), nc[i], num_queries, correct_answer, top_k, dh.sorted);
 		#endif
 	}
 	return 0;

@@ -5,6 +5,7 @@
 // 以下のものはマクロで定義して与える
 // ピボットファイル（csv形式），スケッチ幅（w），スケッチファイル（バイナリファイル）
 
+#include "parm.h"
 #include "config.h"
 #include "bit_op.h"
 #include "ftr.h"

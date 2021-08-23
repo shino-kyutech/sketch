@@ -1,23 +1,51 @@
 #!/bin/bash
-if [ $# -ne 3 ] ; then
-echo "Usage> expand_filenames fc6_ .ftr"
+if [ $# -ne 5 ] ; then
+echo "Usage> expand_filenames fc6_ 0 19 .ftr 1"
 echo "1. prefix      = prefix"
-echo "2. range       = 00_01, 00_09, or 00_99"
-echo "3. sufix       = sufix"
+echo "2. from        = 0, 10, or 90"
+echo "3. to          = 9, 19, or 99"
+echo "4. sufix       = sufix"
+echo "5. mode    = 0 -> range, 1 -> filenames"
 exit 1
 fi
 
 prefix=$1; shift
-range=$1; shift
+from=$1; shift
+to=$1; shift
 sufix=$1; shift
+mode=$1; shift
 
-if [ ${range} == "00" ] ; then
-s=${prefix}${range}${sufix}
-elif [ ${range} == "00_01" ] ; then
+if [ ${mode} -eq 0 ] ; then
+
+if [ ${from} -lt 10 ] ; then
+range=0${from}
+else
+range=${from}
+fi
+
+if [ ${to} -lt 10 ] ; then
+range=${range}_0${to}
+else
+range=${range}_${to}
+fi
+
+echo ${range}
+exit
+
+fi
+
 s=""
-for f in {00..01} ; do
+for f in $(seq ${from} ${to}) ; do
+if [ $f -lt 10 ] ; then
+s="$s ${prefix}0$f${sufix}"
+else
 s="$s ${prefix}$f${sufix}"
+fi
 done
+
+echo $s
+exit
+
 elif [ ${range} == "00_09" ] ; then
 s=""
 for f in {00..09} ; do

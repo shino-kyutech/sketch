@@ -37,7 +37,7 @@ typedef enum {MAIN_MEMORY, SECONDARY_MEMORY} ftr_on_type;
 #endif
 
 #ifndef BLOCK_SIZE
-#define BLOCK_SIZE 0
+#define BLOCK_SIZE 200
 #endif
 
 typedef enum {GHP, BP, QBP, PQBP} partition_type; // 当面は，QBP（元の実装では SKETCH_PARTITION == 2）のみにする．

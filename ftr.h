@@ -1,20 +1,29 @@
 #pragma once
 // 特徴データに関する型定義とデータセットファイルの入出力
+#include "parm.h"
 #include "config.h"
 
 // dataset setting (for Image dataset, #define DATASE IMAGE and switch using DATASET macro)
-typedef enum {IMAGE, DECAF} dataset;
-#define DATASET DECAF
+// typedef enum {IMAGE, DECAF, DEEP1B} dataset;
 
-#if DATASET == DECAF
+#if defined(DECAF)
 // 特徴データの型
 typedef unsigned char ftr_element_type, *ftr_type; 
 #ifndef FTR_DIM
 #define FTR_DIM 4096
 #endif
-
-// 特徴データの付随情報の型 sub_fb_type
-typedef long auxi_type; // DISA_h の 100M データセットでは long (おそらく，なんらかのデータ識別番号)
+#define FTR_MIN 0
+#define FTR_MAX 255
+typedef long auxi_type; // 特徴データの付随情報の型: DISA_h の 100M データセットでは long (おそらく，なんらかのデータ識別番号)
+#elif defined(DEEP1B)
+// 特徴データの型
+typedef signed char ftr_element_type, *ftr_type; 
+#ifndef FTR_DIM
+#define FTR_DIM 96
+#endif
+#define FTR_MIN -127
+#define FTR_MAX 127
+typedef unsigned int auxi_type; // 特徴データの付随情報の型: Deep1B では unsigned int (元のデータにはないので，データ変換時に通し番号を割振った)
 #endif
 
 // 特徴データファイルのヘッダ情報

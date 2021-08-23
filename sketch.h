@@ -110,11 +110,21 @@ typedef struct {
 	sk_num_pair *sk_num;		// representing nonempty buckets (NULL, if not used)
 } struct_bucket;
 
+typedef struct {
+	char *filename;				// filename of bucket file
+	FILE *fp;					// bucket file handler
+	int num_data; 				// the number of data points in dataset
+	int num_nonempty_buckets;	// number of nonempty buckets = number of sk_num_pairs
+	int processed_buckets;		// number of processed buckets (sk_num_pairs)
+	sk_num_pair sk_num;			// next pair of sketch and number of records
+} struct_bucket_sk_num;
+
 //#ifdef NARROW_SKETCH // Priority queue for sketch enumeration only for NARROW sketches
 
 #if defined(NARROW_SKETCH)
 
-#define QSIZE  BIT 
+//#define QSIZE  BIT 
+#define QSIZE  (1L << PJT_DIM) 
 
 typedef struct {
     dist_type key;
@@ -166,7 +176,9 @@ void write_bucket(char *filename, struct_bucket *b);
 void free_bucket(struct_bucket *b);
 struct_bucket *read_bucket(char *filename);
 struct_bucket *read_compact_bucket(char *filename);
-void free_bucket(struct_bucket *b);
+
+struct_bucket_sk_num *open_bucket_sk_num(char *filename);
+int read_next_bucket_sk_num(struct_bucket_sk_num *bsk);
 
 #if defined(NARROW_SKETCH)
 void min_heapify_p(int i, struct_que *que);
@@ -186,6 +198,7 @@ struct_query_sketch *make_query_sketch(struct_dataset *ds_query, pivot_type *piv
 void set_query_sketch(struct_query_sketch *qs, query_type *query, pivot_type *pivot);
 void set_query_sketch_p(struct_query_sketch *qs, query_type *query, pivot_type *pivot, double p);
 dist_type priority(sketch_type s, struct_query_sketch *qs);
+dist_type priority_partitioned(sketch_type s, struct_query_sketch *qs);
 dist_type hamming(sketch_type s, sketch_type t);
 void filtering_by_sequential_search_using_kNN_buffer(struct_query_sketch *qs, int num_data, sketch_type sketch[], kNN_buffer *buff, int data_num[], int num_candidates);
 void filtering_by_sequential_search_using_quick_select_k(struct_query_sketch *qs, int num_data, sketch_type sk[], dist_type sc[], int data_num[], int num_candidates);

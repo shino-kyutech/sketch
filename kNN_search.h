@@ -43,7 +43,9 @@ typedef unsigned int dist_type;
 typedef struct {
 	int data_num;			// データ番号（ftrファイル内での通し番号）
 	dist_type dist;			// 質問との距離（フィルタリングでは，score_p）
-	// auxi_type data_id;		// データID（ftrの補助情報）（処理が重たくなるので削除）
+	#ifdef ANSWER_WITH_DATA_ID
+	auxi_type data_id;		// データID（ftrの補助情報）（処理が重たくなるので削除）
+	#endif
 } answer_type;
 
 typedef struct {
@@ -97,6 +99,8 @@ void search_kNN(dataset_handle *dh, query_type *qr, int num_c, int candidate[], 
 void search_NN(dataset_handle *dh, query_type *qr, int num_c, int candidate[], kNN_buffer *top_k);
 
 void out_result(char *filename, int num_queries, answer_type ans[], kNN_buffer *top_k[]);
-void out_result2(char *filename, int w, int d, long, long, int num_c, int num_queries, answer_type ans[], kNN_buffer *top_k[], int sorted);
-double out_result_double(char *filename, int n_w, int e_w, int d, double, int nc_1st, int nc_2nd, int num_queries, answer_type ans[], kNN_buffer *top_k[]);
+void out_result2(char *filename, int w, int d, double etime, double num_c, int num_queries, answer_type ans[], kNN_buffer *top_k[], int sorted);
+#ifdef DOUBLE_FILTERING
+double out_result_double(char *filename, int n_w, int e_w, int d, double, double nc_1st, double nc_2nd, int num_queries, answer_type ans[], kNN_buffer *top_k[]);
+#endif
 
